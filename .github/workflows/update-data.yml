@@ -1,0 +1,50 @@
+name: Update GKI Kernel Data
+
+on:
+  schedule:
+    - cron: '0 8 */3 * *'  # 每 3 天 UTC 8:00
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - 'data/**'
+      - 'scripts/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run incremental update
+        working-directory: scripts
+        run: |
+          # Exit 0 = data changed, 2 = no changes, 1 = real error
+          python update_data.py && exit_code=0 || exit_code=$?
+          if [ $exit_code -eq 1 ]; then
+            echo "::error::update_data.py failed with an error"
+            exit 1
+          fi
+
+      - name: Commit data changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "chore: update GKI kernel version data"
+            git push
+          fi

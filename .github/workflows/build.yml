@@ -113,7 +113,6 @@ jobs:
           echo "Droidspaces   : ${{ inputs.droidspaces }}"
           echo "NTSync        : ${{ inputs.droidspaces_ntsync }}"
           echo "产物上传模式  : ${{ inputs.artifact_upload_mode }}"
-          echo "Stock Config  : 自动检测 config/stock_defconfig"
           echo "========================================"
 
       - name: 清理磁盘空间
@@ -292,42 +291,6 @@ jobs:
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
           echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
 
-      - name: 应用 Stock Config 伪装
-        run: |
-          STOCK_SRC="$GITHUB_WORKSPACE/config/stock_defconfig"
-          STOCK_DST="$KERNEL_ROOT/common/arch/arm64/configs/stock_defconfig"
-
-          if [ ! -f "$STOCK_SRC" ]; then
-            echo "未检测到 $STOCK_SRC，跳过 Stock Config 伪装。"
-            exit 0
-          fi
-
-          mkdir -p "$(dirname "$STOCK_DST")"
-          if ! cp "$STOCK_SRC" "$STOCK_DST"; then
-            echo "::error::复制 stock_defconfig 失败: $STOCK_SRC -> $STOCK_DST"
-            exit 1
-          fi
-          echo "已复制 stock_defconfig -> $STOCK_DST"
-
-          NEW_RULE='$(obj)/config_data: arch/arm64/configs/stock_defconfig FORCE'
-          OLD_RULE='$(obj)/config_data: $(KCONFIG_CONFIG) FORCE'
-          TARGET_MAKEFILE="$KERNEL_ROOT/common/kernel/Makefile"
-
-          if [ ! -f "$TARGET_MAKEFILE" ]; then
-            echo "::error::未找到 $TARGET_MAKEFILE"
-            exit 1
-          fi
-
-          if grep -qF "$NEW_RULE" "$TARGET_MAKEFILE"; then
-            echo "config_data 规则已是 stock_defconfig，跳过。"
-          elif grep -qF "$OLD_RULE" "$TARGET_MAKEFILE"; then
-            sed -i 's|$(obj)/config_data: $(KCONFIG_CONFIG) FORCE|$(obj)/config_data: arch/arm64/configs/stock_defconfig FORCE|' "$TARGET_MAKEFILE"
-            echo "已替换 config_data 规则: $TARGET_MAKEFILE"
-          else
-            echo "::error::未在 $TARGET_MAKEFILE 找到规则: $OLD_RULE"
-            exit 1
-          fi
-
       - name: 提取实际子版本号
         run: |
           ACTUAL_SUBLEVEL="${{ inputs.sub_level }}"
@@ -380,8 +343,8 @@ jobs:
         if: inputs.supp_op
         working-directory: ${{ env.KERNEL_ROOT }}/common/drivers
         run: |
-          echo "下载一加 骁龙8 Elite/Gen5 支持补丁..."
-          curl -LSs "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c" -o hmbird_patch.c
+          echo "使用本仓库 hmbird_patch.c..."
+          cp "$GITHUB_WORKSPACE/hmbird_patch.c" ./hmbird_patch.c
           echo "obj-y += hmbird_patch.o" >> Makefile
 
       - name: 确定 KernelSU 分支
@@ -390,7 +353,7 @@ jobs:
           variant_input="${{ inputs.ksu_variant }}"
 
           case "$variant_input" in
-            "Official"|"ReSukiSU")
+            "ReSukiSU")
               BRANCH="-s main"
               ;;
             "SukiSU")
@@ -399,9 +362,6 @@ jobs:
               else
                 BRANCH="-s builtin"
               fi
-              ;;
-            "Next")
-              BRANCH=""
               ;;
             *)
               echo "未知变体: $variant_input" >&2
@@ -830,7 +790,7 @@ jobs:
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
 
-          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ] || [ "${{ inputs.ksu_variant }}" == "Next" ]; then
+          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
             if [[ "${{ inputs.use_kpm }}" == enabled* ]] || [[ "${{ inputs.use_kpm }}" == patched* ]]; then
               if ! grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' common KernelSU 2>/dev/null; then
                 echo "错误: 已请求启用 KPM，但当前 KernelSU 代码未声明 CONFIG_KPM" >&2
@@ -1076,7 +1036,7 @@ jobs:
           compression-level: 9
 
       - name: 应用 KPM 补丁（构建期修补 Image）
-        if: startsWith(inputs.use_kpm, 'patched') && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU' || inputs.ksu_variant == 'Next')
+        if: startsWith(inputs.use_kpm, 'patched') && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
         run: |
           set -e
           if [ "${{ inputs.android_version }}" == "android12" ] || [ "${{ inputs.android_version }}" == "android13" ]; then

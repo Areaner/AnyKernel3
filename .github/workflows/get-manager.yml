@@ -33,29 +33,6 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: 🧐 Debug Workflow Caller Context
-        run: |
-          echo "==================== DEBUG CONTEXT ===================="
-          echo " "
-          echo "EVENT NAME: ${{ github.event_name }}"
-          echo " "
-          echo "--- CALLER INFORMATION ---"
-          echo "  - Caller Repository: ${{ github.caller_repository }}"
-          echo "  - Caller Workflow:   ${{ github.caller_workflow }}"
-          echo "  - Caller User:       ${{ github.triggering_actor }}"
-          echo " "
-          echo "--- WORKFLOW & JOB INFORMATION ---"
-          echo "  - Current Workflow:  ${{ github.workflow }}"
-          echo "  - Current Job ID:    ${{ github.job }}"
-          echo "  - Current Run ID:    ${{ github.run_id }}"
-          echo "  - Current Run Number:${{ github.run_number }}"
-          echo " "
-          echo "--- GIT REFERENCE INFORMATION ---"
-          echo "  - Git Ref:           ${{ github.ref }}"
-          echo "  - Ref Type:          ${{ github.ref_type }}"
-          echo " "
-          echo "======================================================="
-
       - name: 安装依赖
         run: |
           sudo apt-get update
@@ -83,12 +60,8 @@ jobs:
 
           if [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             KSU_VERSION=$((40000 + KSU_GIT_VERSION - 2815))
-          elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
+          else
             KSU_VERSION=$((30700 + KSU_GIT_VERSION))
-          elif [ "${{ inputs.kernelsu_variant }}" == "Official" ]; then
-            KSU_VERSION=$((20000 + KSU_GIT_VERSION))
-          elif [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
-            KSU_VERSION=$((30000 + KSU_GIT_VERSION))
           fi
           echo $KSU_VERSION
           echo "KSU_VERSION=$KSU_VERSION" >> $GITHUB_ENV
@@ -146,10 +119,7 @@ jobs:
 
           get_manager_artifacts() {
             local artifacts="$1"
-            if [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
-              printf '%s' "$artifacts" | jq -r --arg name "$KSUM" \
-                '.artifacts[] | select(.name == $name) | "\(.name)\t\(.archive_download_url)"'
-            elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
+            if [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
               printf '%s' "$artifacts" | jq -r \
                 '.artifacts[] | select(.name == "Manager-release" or .name == "Spoofed-Manager-release") | "\(.name)\t\(.archive_download_url)"'
             else
