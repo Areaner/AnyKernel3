@@ -81,6 +81,11 @@ on:
         required: true
         type: boolean
         default: false
+      skip_incompatible:
+        description: "功能不兼容或无法使用时自动跳过该功能（不中断构建）"
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       kernelsu_variant:
@@ -122,6 +127,10 @@ on:
         type: string
         default: "上传全部"
       droidspaces_ntsync:
+        required: false
+        type: boolean
+        default: false
+      skip_incompatible:
         required: false
         type: boolean
         default: false
@@ -225,6 +234,7 @@ jobs:
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
+      skip_incompatible: ${{ inputs.skip_incompatible || false }}
 
   # 仅在直接触发时运行，从 main.yml 调用时跳过
   get-ksu-manager:

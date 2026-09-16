@@ -105,6 +105,12 @@ on:
         type: boolean
         default: false
 
+      # ==================== 兼容性 ====================
+      skip_incompatible:
+        description: "功能不兼容或无法使用时自动跳过该功能（不中断构建）"
+        type: boolean
+        default: false
+
       # ==================== 构建版本选择 ====================
       build_a12_5_10:
         description: "Android 12 - 5.10"
@@ -158,6 +164,7 @@ jobs:
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
+      skip_incompatible: ${{ inputs.skip_incompatible || false }}
       called_from_main: true
 
   # ==================== Android 13 - 5.15 构建 ====================
@@ -178,6 +185,7 @@ jobs:
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
+      skip_incompatible: ${{ inputs.skip_incompatible || false }}
       called_from_main: true
 
   # ==================== Android 14 - 6.1 构建 ====================
@@ -198,6 +206,7 @@ jobs:
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
+      skip_incompatible: ${{ inputs.skip_incompatible || false }}
       called_from_main: true
 
   # ==================== Android 15 - 6.6 构建 ====================
@@ -218,6 +227,7 @@ jobs:
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
+      skip_incompatible: ${{ inputs.skip_incompatible || false }}
       called_from_main: true
 
   # ==================== Android 16 - 6.12 构建 ====================
@@ -238,6 +248,7 @@ jobs:
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
+      skip_incompatible: ${{ inputs.skip_incompatible || false }}
       called_from_main: true
 
   # ==================== 收集补丁冲突文件 ====================

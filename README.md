@@ -46,6 +46,7 @@ Built upon [AnyKernel3](https://github.com/osm0sis/AnyKernel3), this repository 
 | 🩹 CVE-2026-43499 | Optional automatic application of the rtmutex fix |
 | 📱 OnePlus Snapdragon 8 Elite / Gen5 Support | Optional: Add support for OnePlus Snapdragon 8 Elite / Gen5 processor |
 | 🐳 Droidspaces | Optional container support with NTSync kernel compatibility patch |
+| 🧩 Skip Incompatible | Optional: auto-skip incompatible or unusable features (except SUSFS and OnePlus 8 Elite/Gen5 support) instead of failing the build |
 
 ## 🚀 Usage
 
@@ -54,7 +55,7 @@ Built upon [AnyKernel3](https://github.com/osm0sis/AnyKernel3), this repository 
 3. Click **Run workflow** and fill in the parameters as needed:
    - `android_version` / `kernel_version` / `sub_level` / `os_patch_level`
    - `ksu_variant`: KernelSU variant (SukiSU / ReSukiSU)
-   - Feature switches: `enable_susfs`, `use_zram`, `use_bbg`, `use_kpm`, etc.
+   - Feature switches: `enable_susfs`, `use_zram`, `use_bbg`, `use_kpm`, `skip_incompatible`, etc.
 4. Once the build finishes, download the **Artifacts** from the run page:
    - `AnyKernel3.zip` — flashable zip (recommended; flash via custom Recovery or KSU)
    - `boot.img` / `boot-gz.img` / `boot-lz4.img` — boot images for each compression format
@@ -159,6 +160,7 @@ A commit is a hash string representing the state of a repository at a certain po
 | 🩹 CVE-2026-43499 | 可选自动应用 rtmutex 修复补丁 |
 | 📱 一加 骁龙8 Elite/Gen5 支持 | 可选添加一加 骁龙8 Elite/Gen5 处理器支持 |
 | 🐳 Droidspaces | 可选容器支持及 NTSync 内核兼容补丁 |
+| 🧩 兼容跳过 | 可选：功能不兼容或无法使用时自动跳过该功能（SUSFS 与 一加 骁龙8 Elite/Gen5 支持除外，二者失败仍会中断构建），不中断构建 |
 
 ## 🚀 使用方法
 
@@ -167,7 +169,7 @@ A commit is a hash string representing the state of a repository at a certain po
 3. 点击 **Run workflow**，按需填写参数：
    - `android_version` / `kernel_version` / `sub_level` / `os_patch_level`
    - `ksu_variant`：KernelSU 变体（SukiSU / ReSukiSU）
-   - 功能开关：`enable_susfs`、`use_zram`、`use_bbg`、`use_kpm` 等 
+   - 功能开关：`enable_susfs`、`use_zram`、`use_bbg`、`use_kpm`、`skip_incompatible` 等 
 4. 构建完成后，在本次运行页面下载 **Artifacts**：
    - `AnyKernel3.zip` —— 卡刷包（推荐，配合自定义 Recovery 或 KSU 刷入）
    - `boot.img` / `boot-gz.img` / `boot-lz4.img` —— 每种压缩格式的 boot 镜像

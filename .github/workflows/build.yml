@@ -80,6 +80,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_incompatible:
+        description: "功能不兼容或无法使用时自动跳过该功能（不中断构建）"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-kernel:
@@ -91,6 +96,7 @@ jobs:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
+      SKIP_INCOMPATIBLE: ${{ inputs.skip_incompatible }}
 
     steps:
       - name: 构建信息摘要
@@ -112,6 +118,7 @@ jobs:
           echo "CVE-2026-43499: ${{ inputs.cve_2026_43499_patch }}"
           echo "Droidspaces   : ${{ inputs.droidspaces }}"
           echo "NTSync        : ${{ inputs.droidspaces_ntsync }}"
+          echo "兼容跳过      : ${{ inputs.skip_incompatible }}"
           echo "产物上传模式  : ${{ inputs.artifact_upload_mode }}"
           echo "========================================"
 
@@ -306,10 +313,17 @@ jobs:
         if: inputs.cve_2026_43499_patch
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
-          bash "$GITHUB_WORKSPACE/security_patch/apply_cve_2026_43499.sh" \
+          if ! bash "$GITHUB_WORKSPACE/security_patch/apply_cve_2026_43499.sh" \
             "${{ inputs.kernel_version }}" \
             "$ACTUAL_SUBLEVEL" \
-            "$GITHUB_WORKSPACE/security_patch"
+            "$GITHUB_WORKSPACE/security_patch"; then
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=CVE-2026-43499 已跳过::修复链应用失败（可能不兼容当前内核子版本），已跳过该功能继续构建"
+              exit 0
+            fi
+            echo "::error::CVE-2026-43499 修复链应用失败"
+            exit 1
+          fi
 
       - name: 修复 glibc 2.38 兼容性
         working-directory: ${{ env.KERNEL_ROOT }}/common
@@ -426,14 +440,21 @@ jobs:
       - name: 克隆 Droidspaces 补丁仓库
         if: inputs.droidspaces != 'off'
         run: |
-          git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git /tmp/Droidspaces-OSS
-          echo "DROIDSPACES_PATCHES=/tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
+          if git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git /tmp/Droidspaces-OSS; then
+            echo "DROIDSPACES_PATCHES=/tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
+          elif [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+            echo "::warning title=Droidspaces 已跳过::Droidspaces 补丁仓库克隆失败，已跳过 Droidspaces 功能"
+            echo "DROIDSPACES_SKIPPED=true" >> "$GITHUB_ENV"
+          else
+            echo "::error::Droidspaces 补丁仓库克隆失败"
+            exit 1
+          fi
 
       - name: 备份基准 defconfig
         run: cp "$DEFCONFIG" "$DEFCONFIG.orig"
 
       - name: 集成 Droidspaces 支持
-        if: inputs.droidspaces != 'off'
+        if: inputs.droidspaces != 'off' && env.DROIDSPACES_SKIPPED != 'true'
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           KERNEL_VER="${{ inputs.kernel_version }}"
@@ -454,6 +475,15 @@ jobs:
               exit 0
               ;;
           esac
+          if [ ! -f "$PATCH_FILE" ]; then
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=Droidspaces 已跳过::未找到补丁文件 $PATCH_FILE，已跳过 Droidspaces 功能"
+              echo "DROIDSPACES_SKIPPED=true" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "::error::未找到 Droidspaces 补丁文件: $PATCH_FILE"
+            exit 1
+          fi
           if ! patch -p1 --forward < "$PATCH_FILE"; then
             echo "::warning::SYSVIPC kABI 补丁应用失败，可能已应用或上下文不匹配"
           fi
@@ -556,7 +586,7 @@ jobs:
           fi
 
       - name: 注入 NTSync 内核配置
-        if: inputs.droidspaces != 'off' && inputs.droidspaces_ntsync
+        if: inputs.droidspaces != 'off' && inputs.droidspaces_ntsync && env.DROIDSPACES_SKIPPED != 'true'
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           set -e
@@ -586,12 +616,29 @@ jobs:
               ;;
           esac
 
-          echo "自动选择 NTSync 补丁: ${NTSYNC_PATCH}.patch"
-          wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch"
-          wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/${NTSYNC_PATCH}.patch"
+          ntsync_fail() {
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=NTSync 已跳过::$1，已跳过 NTSync 功能"
+              exit 0
+            fi
+            echo "::error::$1"
+            exit 1
+          }
 
-          patch -p1 < "ntsync_base.patch"
-          patch -p1 < "${NTSYNC_PATCH}.patch"
+          echo "自动选择 NTSync 补丁: ${NTSYNC_PATCH}.patch"
+          if ! wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch"; then
+            ntsync_fail "NTSync 基础补丁下载失败"
+          fi
+          if ! wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/${NTSYNC_PATCH}.patch"; then
+            ntsync_fail "NTSync 平台补丁 ${NTSYNC_PATCH}.patch 下载失败"
+          fi
+
+          if ! patch -p1 < "ntsync_base.patch"; then
+            ntsync_fail "NTSync 基础补丁应用失败（可能不兼容当前内核）"
+          fi
+          if ! patch -p1 < "${NTSYNC_PATCH}.patch"; then
+            ntsync_fail "NTSync 平台补丁应用失败（可能不兼容当前内核）"
+          fi
 
           cd ..
 
@@ -624,12 +671,43 @@ jobs:
         if: inputs.use_zram
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
+          # 前置检查：所有补丁资源必须存在，缺失时按兼容跳过策略处理，避免修改到一半再失败
+          MISSING=""
+          [ -d "$ZZH_PATCHES/zram/lz4" ] || MISSING="$MISSING zram/lz4"
+          [ -f "$ZZH_PATCHES/zram/apply_lz4_neon.sh" ] || MISSING="$MISSING zram/apply_lz4_neon.sh"
+          [ -d "$ZZH_PATCHES/zram/include/linux" ] || MISSING="$MISSING zram/include/linux"
+          [ -d "$SUKISU_PATCHES/other/zram/lz4k" ] || MISSING="$MISSING SukiSU_patch/other/zram/lz4k"
+          [ -d "$SUKISU_PATCHES/other/zram/lz4k_oplus" ] || MISSING="$MISSING SukiSU_patch/other/zram/lz4k_oplus"
+          [ -f "$SUKISU_PATCHES/other/zram/zram_patch/${{ inputs.kernel_version }}/lz4kd.patch" ] || MISSING="$MISSING zram_patch/${{ inputs.kernel_version }}/lz4kd.patch"
+          [ -f "$SUKISU_PATCHES/other/zram/zram_patch/${{ inputs.kernel_version }}/lz4k_oplus.patch" ] || MISSING="$MISSING zram_patch/${{ inputs.kernel_version }}/lz4k_oplus.patch"
+          if [ -n "$MISSING" ]; then
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=ZRAM 已跳过::缺少 ZRAM 补丁资源:$MISSING，已跳过 ZRAM 功能"
+              echo "ZRAM_SKIPPED=true" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "::error::缺少 ZRAM 补丁资源:$MISSING"
+            exit 1
+          fi
+
+          zram_step_fail() {
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=ZRAM 已跳过::$1，已跳过 ZRAM 功能"
+              echo "ZRAM_SKIPPED=true" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "::error::$1"
+            exit 1
+          }
+
           echo "升级 LZ4..."
           rm -f lib/lz4/lz4_compress.c lib/lz4/lz4_decompress.c lib/lz4/lz4defs.h lib/lz4/lz4hc_compress.c
 
           cp -r $ZZH_PATCHES/zram/lz4/* ./lib/lz4/
           cp -r $ZZH_PATCHES/zram/include/linux/* ./include/linux/
-          bash $ZZH_PATCHES/zram/apply_lz4_neon.sh
+          if ! bash $ZZH_PATCHES/zram/apply_lz4_neon.sh; then
+            zram_step_fail "apply_lz4_neon.sh 执行失败"
+          fi
 
           if [ -f "fs/f2fs/Makefile" ] && ! grep -qF "f2fs-\$(CONFIG_F2FS_IOSTAT) += iostat.o" "fs/f2fs/Makefile"; then
             echo "f2fs-\$(CONFIG_F2FS_IOSTAT) += iostat.o" >> "fs/f2fs/Makefile"
@@ -697,7 +775,7 @@ jobs:
           ensure_line_once "$XIAOMI_SYMBOL_LIST" "device_find_any_child"
 
       - name: 配置 ZRAM 选项
-        if: inputs.use_zram
+        if: inputs.use_zram && env.ZRAM_SKIPPED != 'true'
         run: |
           CONFIG_FILE="$DEFCONFIG"
 
@@ -737,7 +815,27 @@ jobs:
         if: inputs.use_bbg
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+          bbg_fail() {
+            # 回滚半成品安装，避免残留引用破坏编译
+            sh /tmp/bbg_setup.sh --cleanup >/dev/null 2>&1 || true
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=BBG 已跳过::$1，已跳过 BBG 防格机功能"
+              exit 0
+            fi
+            echo "::error::$1"
+            exit 1
+          }
+
+          if ! wget -qO /tmp/bbg_setup.sh https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh; then
+            bbg_fail "BBG 安装脚本下载失败"
+          fi
+          if ! sh /tmp/bbg_setup.sh; then
+            bbg_fail "BBG 安装脚本执行失败"
+          fi
+          if [ ! -f common/security/baseband-guard/Kconfig ] || ! grep -q 'baseband-guard' common/security/Makefile; then
+            bbg_fail "BBG 安装结果校验失败（可能不适配当前内核目录结构）"
+          fi
+
           echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig
 
@@ -745,41 +843,57 @@ jobs:
         if: inputs.use_rekernel
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
-          set -e
-          echo "Integrating Re-Kernel..."
-          TMP_REKERNEL=/tmp/rekernel
-          rm -rf "$TMP_REKERNEL"
-          git clone --depth 1 https://github.com/Sakion-Team/Re-Kernel.git "$TMP_REKERNEL"
+          if ( set -e
+            echo "Integrating Re-Kernel..."
+            TMP_REKERNEL=/tmp/rekernel
+            rm -rf "$TMP_REKERNEL"
+            git clone --depth 1 https://github.com/Sakion-Team/Re-Kernel.git "$TMP_REKERNEL"
 
-          # 同步上游拆分后的完整驱动源码
+            # 同步上游拆分后的完整驱动源码
+            rm -rf common/drivers/rekernel
+            mkdir -p common/drivers/rekernel
+            cp -a "$TMP_REKERNEL/LKM-Source/." common/drivers/rekernel/
+
+            # 将上游外置模块配置适配为内核内置驱动
+            REKERNEL_MAKEFILE="common/drivers/rekernel/Makefile"
+            sed -i 's/^obj-m := rekernel\.o$/obj-$(CONFIG_REKERNEL) += rekernel.o/' "$REKERNEL_MAKEFILE"
+            grep -qF 'ccflags-$(CONFIG_REKERNEL_LEGACY_NETLINK) += -DLEGACY_NETLINK' "$REKERNEL_MAKEFILE" || \
+              echo 'ccflags-$(CONFIG_REKERNEL_LEGACY_NETLINK) += -DLEGACY_NETLINK' >> "$REKERNEL_MAKEFILE"
+            sed -i '/^[[:space:]]*depends on MODULES[[:space:]]*$/d' common/drivers/rekernel/Kconfig
+
+            # 挂载到驱动树
+            if ! grep -qF 'source "drivers/rekernel/Kconfig"' common/drivers/Kconfig; then
+              sed -i '/^endmenu$/i source "drivers/rekernel/Kconfig"' common/drivers/Kconfig
+            fi
+            if ! grep -qF 'obj-$(CONFIG_REKERNEL) += rekernel/' common/drivers/Makefile; then
+              echo 'obj-$(CONFIG_REKERNEL) += rekernel/' >> common/drivers/Makefile
+            fi
+
+            # 修正头文件包含路径（适配 in-tree 编译）
+            sed -i 's|#include <../android/binder_internal.h>|#include "../android/binder_internal.h"|g' common/drivers/rekernel/rekernel_binder.c
+            # 补齐 5.10 binder_internal.h 使用 DEFINE_SHOW_ATTRIBUTE 所需的定义
+            grep -qF '#include <linux/seq_file.h>' common/drivers/rekernel/rekernel_binder.c || \
+              sed -i '/#include <linux\/kprobes.h>/a #include <linux/seq_file.h>' common/drivers/rekernel/rekernel_binder.c
+
+            # 配置 defconfig（幂等）
+            grep -q '^CONFIG_REKERNEL=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL=y" >> "$DEFCONFIG"
+            grep -q '^CONFIG_REKERNEL_NETWORK=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL_NETWORK=y" >> "$DEFCONFIG"
+          ); then
+            exit 0
+          fi
+
+          # 集成失败：回滚半成品状态，避免残留引用破坏编译
           rm -rf common/drivers/rekernel
-          mkdir -p common/drivers/rekernel
-          cp -a "$TMP_REKERNEL/LKM-Source/." common/drivers/rekernel/
+          sed -i '\|source "drivers/rekernel/Kconfig"|d' common/drivers/Kconfig 2>/dev/null || true
+          sed -i '\|obj-$(CONFIG_REKERNEL) += rekernel/|d' common/drivers/Makefile 2>/dev/null || true
+          sed -i '/^CONFIG_REKERNEL=y$/d; /^CONFIG_REKERNEL_NETWORK=y$/d' "$DEFCONFIG" 2>/dev/null || true
 
-          # 将上游外置模块配置适配为内核内置驱动
-          REKERNEL_MAKEFILE="common/drivers/rekernel/Makefile"
-          sed -i 's/^obj-m := rekernel\.o$/obj-$(CONFIG_REKERNEL) += rekernel.o/' "$REKERNEL_MAKEFILE"
-          grep -qF 'ccflags-$(CONFIG_REKERNEL_LEGACY_NETLINK) += -DLEGACY_NETLINK' "$REKERNEL_MAKEFILE" || \
-            echo 'ccflags-$(CONFIG_REKERNEL_LEGACY_NETLINK) += -DLEGACY_NETLINK' >> "$REKERNEL_MAKEFILE"
-          sed -i '/^[[:space:]]*depends on MODULES[[:space:]]*$/d' common/drivers/rekernel/Kconfig
-
-          # 挂载到驱动树
-          if ! grep -qF 'source "drivers/rekernel/Kconfig"' common/drivers/Kconfig; then
-            sed -i '/^endmenu$/i source "drivers/rekernel/Kconfig"' common/drivers/Kconfig
+          if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+            echo "::warning title=Re-Kernel 已跳过::Re-Kernel 集成失败（仓库不可用或源码不适配当前内核），已回滚并跳过该功能"
+            exit 0
           fi
-          if ! grep -qF 'obj-$(CONFIG_REKERNEL) += rekernel/' common/drivers/Makefile; then
-            echo 'obj-$(CONFIG_REKERNEL) += rekernel/' >> common/drivers/Makefile
-          fi
-
-          # 修正头文件包含路径（适配 in-tree 编译）
-          sed -i 's|#include <../android/binder_internal.h>|#include "../android/binder_internal.h"|g' common/drivers/rekernel/rekernel_binder.c
-          # 补齐 5.10 binder_internal.h 使用 DEFINE_SHOW_ATTRIBUTE 所需的定义
-          grep -qF '#include <linux/seq_file.h>' common/drivers/rekernel/rekernel_binder.c || \
-            sed -i '/#include <linux\/kprobes.h>/a #include <linux/seq_file.h>' common/drivers/rekernel/rekernel_binder.c
-
-          # 配置 defconfig（幂等）
-          grep -q '^CONFIG_REKERNEL=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL=y" >> "$DEFCONFIG"
-          grep -q '^CONFIG_REKERNEL_NETWORK=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL_NETWORK=y" >> "$DEFCONFIG"
+          echo "::error::Re-Kernel 集成失败"
+          exit 1
 
       - name: 配置内核选项
         working-directory: ${{ env.KERNEL_ROOT }}
@@ -792,11 +906,15 @@ jobs:
 
           if [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
             if [[ "${{ inputs.use_kpm }}" == enabled* ]] || [[ "${{ inputs.use_kpm }}" == patched* ]]; then
-              if ! grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' common KernelSU 2>/dev/null; then
+              if grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' common KernelSU 2>/dev/null; then
+                echo "CONFIG_KPM=y" >> "$DEFCONFIG"
+              elif [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+                echo "::warning title=KPM 已跳过::当前 KernelSU 代码未声明 CONFIG_KPM，已跳过 KPM 功能"
+                echo "KPM_SKIPPED=true" >> "$GITHUB_ENV"
+              else
                 echo "错误: 已请求启用 KPM，但当前 KernelSU 代码未声明 CONFIG_KPM" >&2
                 exit 1
               fi
-              echo "CONFIG_KPM=y" >> "$DEFCONFIG"
             fi
           fi
 
@@ -1052,10 +1170,28 @@ jobs:
 
           cd "$TARGET_PATH"
           # patch_linux 为内置 kpimg 的 kptools：无参数运行时默认读取 ./Image 并输出 ./oImage
-          cp -f "$SUKISU_PATCHES/kpm/patch_linux" ./patch
+          if ! cp -f "$SUKISU_PATCHES/kpm/patch_linux" ./patch; then
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=KPM 已跳过::未找到 KPM 修补工具 $SUKISU_PATCHES/kpm/patch_linux，已跳过 KPM 构建期修补，使用未修补 Image"
+              exit 0
+            fi
+            echo "::error::未找到 KPM 修补工具 $SUKISU_PATCHES/kpm/patch_linux"
+            exit 1
+          fi
           chmod 755 ./patch
-          ./patch
+          if ! ./patch; then
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=KPM 已跳过::patch_linux 执行失败（可能不适配当前内核版本），已跳过 KPM 构建期修补，使用未修补 Image"
+              exit 0
+            fi
+            echo "::error::KPM 修补工具执行失败"
+            exit 1
+          fi
           if [ ! -f ./oImage ]; then
+            if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
+              echo "::warning title=KPM 已跳过::KPM 补丁未生成 oImage（patch_linux 可能不适配当前内核版本），已跳过 KPM 构建期修补，使用未修补 Image"
+              exit 0
+            fi
             echo "::error::KPM 补丁未生成 oImage，patch_linux 可能不适配当前内核版本"
             exit 1
           fi
