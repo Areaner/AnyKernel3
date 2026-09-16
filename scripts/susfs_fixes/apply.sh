@@ -109,9 +109,12 @@ if [[ "$ANDROID_VERSION" == "android16" && "$KERNEL_VERSION" == "6.12" ]]; then
 fi
 
 # 新版内核在 super.c 的 internal.h 之后新增了 trace/hooks/fs.h，
-# 与 SUSFS 主补丁的上下文不符，会导致 extern 声明整段被拒绝
+# 旧版 SUSFS 主补丁以 thaw_super_locked 为上下文插入 extern 声明，会整段被拒绝；
+# 上游 2026-09-15 起已把声明挪到 unnamed_dev_ida 之后，不再依赖这段上下文，
+# 但 ShirkNeko fork 尚未同步（固定提交的旧版补丁不改 super.c），只对旧版补丁做临时调整
 SUPER_FS_H_REMOVED=""
-if grep -qF '#include <trace/hooks/fs.h>' fs/super.c; then
+if grep -q '^ static int thaw_super_locked' "$SUSFS_PATCH" \
+  && grep -qF '#include <trace/hooks/fs.h>' fs/super.c; then
   echo "临时调整 super.c 上下文"
   sed -i '/^#include <trace\/hooks\/fs.h>$/,+1d' fs/super.c
   SUPER_FS_H_REMOVED=1
@@ -142,6 +145,26 @@ if [[ -n "$EXEC_HELPER" ]] \
     echo "::error::$KSU_VARIANT exec hook 结构已变化，无法完成兼容修复"
     exit 1
   fi
+fi
+
+# 上游 5.10 主补丁把 susfs_sus_kstat_spoof_vfs_statfs 的 extern 声明放在了
+# fs/statfs.c 的使用点之后（vfs_statfs 之前），clang -Werror 报隐式声明；
+# 声明属于 SUSFS 接口，直接补进公共头 include/linux/susfs_def.h：
+# 不依赖 statfs.c 内锚点与行号比较，声明重复合法，上游后续自行修复也不冲突
+SUSFS_DEF_H="$KERNEL_ROOT/common/include/linux/susfs_def.h"
+if [[ -f fs/statfs.c ]] && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs(' fs/statfs.c \
+  && [[ -f "$SUSFS_DEF_H" ]] \
+  && ! grep -qF 'susfs_sus_kstat_spoof_vfs_statfs(' "$SUSFS_DEF_H"; then
+  echo "将 susfs_sus_kstat_spoof_vfs_statfs 声明补入 include/linux/susfs_def.h"
+  sed -i '/^#endif \/\/ #ifndef KSU_SUSFS_DEF_H$/i extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);' "$SUSFS_DEF_H"
+fi
+
+# 上游 susfs.c 直接调用 security_sb_statfs 却没有包含 linux/security.h，
+# 5.15+ 靠其他头文件间接带入，5.10 没有这条路径，clang -Werror 报隐式声明；缺失时补上
+if [[ -f fs/susfs.c ]] && grep -qF 'security_sb_statfs(' fs/susfs.c \
+  && ! grep -qF '#include <linux/security.h>' fs/susfs.c; then
+  echo "为 susfs.c 补充 linux/security.h 头文件"
+  sed -i '0,/^#include <linux\/fs.h>$/s//#include <linux\/fs.h>\n#include <linux\/security.h>/' fs/susfs.c
 fi
 
 # 在编译前报告 SUSFS 主补丁产生的冲突文件
