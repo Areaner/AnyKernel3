@@ -122,6 +122,37 @@ fi
 
 patch -p1 < "$SUSFS_PATCH" || true
 
+# ---- 预期冲突处理：上游已包含同款修改的 .rej 剔除，真实缺失的手工补齐 ----
+
+# 1) fs/unicode：ASB 内核已包含上游 "unicode: don't special case ignorable code
+#    points" 提交，主补丁删除 ignore_init / 重生成 utf8data 的 hunk 已天然满足
+if [[ -f fs/unicode/mkutf8data.c.rej ]] && ! grep -q 'ignore_init' fs/unicode/mkutf8data.c; then
+  echo "fs/unicode .rej 为上游已包含同款修改，剔除预期冲突文件"
+  rm -f fs/unicode/*.rej
+fi
+
+# 2) mm/rmap.c：6.6.127+ 已包含 huge_pmd_unshare 的 tlb 化改造
+if [[ -f mm/rmap.c.rej ]] && grep -q 'tlb_gather_mmu_vma' mm/rmap.c; then
+  echo "mm/rmap.c .rej 为上游已包含同款修改，剔除预期冲突文件"
+  rm -f mm/rmap.c.rej
+fi
+
+# 3) fs/proc/task_mmu.c（6.12.69+）：show_smap 重构（vma_pages → vma_data_pages）
+#    导致 SUS_MAP 检查 hunk 上下文失配被拒，属于真实缺失，手工补回
+if [[ -f fs/proc/task_mmu.c.rej ]] \
+  && grep -qF 'static int show_smap(struct seq_file *m, void *v)' fs/proc/task_mmu.c; then
+  SHOW_SMAP_BODY="$(sed -n '/^static int show_smap(struct seq_file \*m, void \*v)/,/^}/p' fs/proc/task_mmu.c)"
+  if [[ -n "$SHOW_SMAP_BODY" ]] && ! grep -qF 'SUSFS_IS_INODE_SUS_MAP' <<< "$SHOW_SMAP_BODY"; then
+    echo "为 show_smap 手工补入 SUS_MAP 检查（6.12.69+ 上下文漂移）"
+    perl -0pi -e 's/(static int show_smap\(struct seq_file \*m, void \*v\)\n\{\n\tstruct vm_area_struct \*vma = v;\n\tstruct mem_size_stats mss = \{\};\n)/$1\n#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n\tif (vma->vm_file) {\n\t\tif (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))\n\t\t\treturn 0;\n\t}\n#endif \/\/ #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n/' fs/proc/task_mmu.c
+    if ! grep -qF 'SUSFS_IS_INODE_SUS_MAP' fs/proc/task_mmu.c; then
+      echo "::error::show_smap SUS_MAP 检查手工补丁失败，请人工核对 fs/proc/task_mmu.c"
+      exit 1
+    fi
+    rm -f fs/proc/task_mmu.c.rej
+  fi
+fi
+
 # 为尚未提供 SU 会话 FD 接口的 SukiSU/ReSukiSU 恢复旧版 exec hook 行为
 EXEC_HELPER=""
 if [[ "$KSU_VARIANT" == SukiSU* || "$KSU_VARIANT" == "ReSukiSU" ]]; then
