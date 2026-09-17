@@ -41,6 +41,7 @@ Built upon [AnyKernel3](https://github.com/osm0sis/AnyKernel3), this repository 
 | 🙈 SUSFS | Kernel-level hiding working with KSU to complete environment spoofing |
 | 💾 ZRAM LZ4 | ZRAM Compression Algorithm Patch |
 | 🛡️ BBG (Baseband Guard) | BBG patch to protect the baseband partitions from accidental wipe |
+| 🌐 Network enhancement | Optional IPSet + BBR kernel config (BBR congestion control, fq qdisc, full IPSet types) |
 | ⚡ KPM | Optional KPM feature / build-time patching |
 | 🔔 Re-Kernel | Optional Re-Kernel driver integration |
 | 🩹 CVE-2026-43499 | Optional automatic application of the rtmutex fix |
@@ -55,7 +56,7 @@ Built upon [AnyKernel3](https://github.com/osm0sis/AnyKernel3), this repository 
 3. Click **Run workflow** and fill in the parameters as needed:
    - `android_version` / `kernel_version` / `sub_level` / `os_patch_level`
    - `ksu_variant`: KernelSU variant (SukiSU / ReSukiSU)
-   - Feature switches: `enable_susfs`, `use_zram`, `use_bbg`, `use_kpm`, `skip_incompatible`, etc.
+   - Feature switches: `enable_susfs`, `use_zram`, `use_bbg`, `use_net_enhance`, `use_kpm`, `skip_incompatible`, etc.
 4. Once the build finishes, download the **Artifacts** from the run page:
    - `AnyKernel3.zip` — flashable zip (recommended; flash via custom Recovery or KSU)
    - `boot.img` / `boot-gz.img` / `boot-lz4.img` — boot images for each compression format
@@ -155,6 +156,7 @@ A commit is a hash string representing the state of a repository at a certain po
 | 🙈 SUSFS | 内核级隐藏，配合 KSU 完成环境伪装 |
 | 💾 ZRAM LZ4 | ZRAM 压缩算法补丁 |
 | 🛡️ BBG 基带保护 | BBG（BaseBand Guard）补丁，保护基带分区，防止基带被意外擦除 |
+| 🌐 网络增强 | 可选 IPSet + BBR 内核配置（BBR 拥塞控制 + fq 队列 + IPSet 全类型） |
 | ⚡ KPM | 可选开启 KPM 功能 / 构建期修补 |
 | 🔔 Re-Kernel | 可选集成 Re-Kernel 驱动 |
 | 🩹 CVE-2026-43499 | 可选自动应用 rtmutex 修复补丁 |
@@ -169,7 +171,7 @@ A commit is a hash string representing the state of a repository at a certain po
 3. 点击 **Run workflow**，按需填写参数：
    - `android_version` / `kernel_version` / `sub_level` / `os_patch_level`
    - `ksu_variant`：KernelSU 变体（SukiSU / ReSukiSU）
-   - 功能开关：`enable_susfs`、`use_zram`、`use_bbg`、`use_kpm`、`skip_incompatible` 等 
+   - 功能开关：`enable_susfs`、`use_zram`、`use_bbg`、`use_net_enhance`、`use_kpm`、`skip_incompatible` 等 
 4. 构建完成后，在本次运行页面下载 **Artifacts**：
    - `AnyKernel3.zip` —— 卡刷包（推荐，配合自定义 Recovery 或 KSU 刷入）
    - `boot.img` / `boot-gz.img` / `boot-lz4.img` —— 每种压缩格式的 boot 镜像

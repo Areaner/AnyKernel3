@@ -66,6 +66,11 @@ on:
         required: true
         type: boolean
         default: false
+      use_net_enhance:
+        description: "启用 网络增强 (IPSet + BBR)"
+        required: true
+        type: boolean
+        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
@@ -109,6 +114,10 @@ on:
       use_bbg:
         required: true
         type: boolean
+      use_net_enhance:
+        required: true
+        type: boolean
+        default: false
       use_kpm:
         required: true
         type: string
@@ -197,6 +206,7 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
+      use_net_enhance: ${{ inputs.use_net_enhance }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
