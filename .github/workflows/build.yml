@@ -871,6 +871,20 @@ jobs:
             exit 1
           }
 
+          # 幂等写入：行已存在则跳过；符号已有赋值（含 =m）或 "# not set" 则原地替换；否则追加
+          ensure_cfg() {
+            local line="$1"
+            local cfg="${line%%=*}"
+            if grep -qxF "$line" "$DEFCONFIG"; then
+              return 0
+            fi
+            if grep -Eq "^${cfg}=|^# ${cfg} is not set$" "$DEFCONFIG"; then
+              sed -i -E "s|^${cfg}=.*|${line}|; s|^# ${cfg} is not set$|${line}|" "$DEFCONFIG"
+            else
+              echo "$line" >> "$DEFCONFIG"
+            fi
+          }
+
           # 兼容性检查：BBR 与 IPSet 子系统必须存在于内核源码
           if [ ! -f common/net/ipv4/tcp_bbr.c ]; then
             net_fail "内核源码缺少 net/ipv4/tcp_bbr.c，无法启用 BBR"
@@ -879,39 +893,51 @@ jobs:
             net_fail "内核源码缺少 net/netfilter/ipset，无法启用 IPSet"
           fi
 
-          # BBR：GKI 6.6/6.12 已内建 TCP_CONG_BBR，只需设为默认拥塞控制；
-          # 5.10/5.15/6.1 未启用，且 DEFAULT_BBR 受 TCP_CONG_ADVANCED 门控，需一并打开
-          if ! grep -q '^CONFIG_TCP_CONG_BBR=y$' "$DEFCONFIG"; then
-            {
-              echo "CONFIG_TCP_CONG_ADVANCED=y"
-              echo "CONFIG_TCP_CONG_BBR=y"
-            } >> "$DEFCONFIG"
-          fi
-          echo "CONFIG_DEFAULT_BBR=y" >> "$DEFCONFIG"
+          # BBR：5.10/5.15/6.1 需先开 ADVANCED（DEFAULT_BBR 受其门控）；
+          # 6.6/6.12 已内建 BBR，ensure_cfg 对已存在的行自动跳过
+          ensure_cfg "CONFIG_TCP_CONG_ADVANCED=y"
+          ensure_cfg "CONFIG_TCP_CONG_BBR=y"
+          ensure_cfg "CONFIG_DEFAULT_BBR=y"
+          ensure_cfg "CONFIG_NET_SCH_FQ=y"
+          ensure_cfg "CONFIG_NET_SCH_FQ_CODEL=y"
 
           # IPSet：GKI 各版本均未启用，全新内建（内核侧支持；用户态需配合 ipset 工具使用）
-          {
-            echo "CONFIG_IP_SET=y"
-            echo "CONFIG_IP_SET_BITMAP_IP=y"
-            echo "CONFIG_IP_SET_BITMAP_IPMAC=y"
-            echo "CONFIG_IP_SET_BITMAP_PORT=y"
-            echo "CONFIG_IP_SET_HASH_IP=y"
-            echo "CONFIG_IP_SET_HASH_IPMAC=y"
-            echo "CONFIG_IP_SET_HASH_IPMARK=y"
-            echo "CONFIG_IP_SET_HASH_IPPORT=y"
-            echo "CONFIG_IP_SET_HASH_IPPORTIP=y"
-            echo "CONFIG_IP_SET_HASH_IPPORTNET=y"
-            echo "CONFIG_IP_SET_HASH_NET=y"
-            echo "CONFIG_IP_SET_HASH_NETIFACE=y"
-            echo "CONFIG_IP_SET_HASH_NETNET=y"
-            echo "CONFIG_IP_SET_HASH_NETPORT=y"
-            echo "CONFIG_IP_SET_HASH_NETPORTNET=y"
-            echo "CONFIG_IP_SET_LIST_SET=y"
-            echo "CONFIG_NETFILTER_XT_SET=y"
-          } >> "$DEFCONFIG"
+          # IP_SET_MAX 上限 65534 已由上游 Kconfig（range 2 65534）验证，无需改源码
+          ensure_cfg "CONFIG_IP_SET=y"
+          ensure_cfg "CONFIG_IP_SET_MAX=65534"
+          ensure_cfg "CONFIG_IP_SET_BITMAP_IP=y"
+          ensure_cfg "CONFIG_IP_SET_BITMAP_IPMAC=y"
+          ensure_cfg "CONFIG_IP_SET_BITMAP_PORT=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_IP=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_IPMAC=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_IPMARK=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_IPPORT=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_IPPORTIP=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_IPPORTNET=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_IPMAC=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_MAC=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_NET=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_NETIFACE=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_NETNET=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_NETPORT=y"
+          ensure_cfg "CONFIG_IP_SET_HASH_NETPORTNET=y"
+          ensure_cfg "CONFIG_IP_SET_LIST_SET=y"
+          ensure_cfg "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y"
+          ensure_cfg "CONFIG_NETFILTER_XT_SET=y"
+          ensure_cfg "CONFIG_IP6_NF_NAT=y"
+          ensure_cfg "CONFIG_IP6_NF_TARGET_MASQUERADE=y"
 
+          # 附加拥塞算法（BBR 之外的备选，各 GKI 版本符号均存在）
+          ensure_cfg "CONFIG_TCP_CONG_CUBIC=y"
+          ensure_cfg "CONFIG_TCP_CONG_WESTWOOD=y"
+          ensure_cfg "CONFIG_TCP_CONG_HTCP=y"
+
+          # 写后校验：关键符号必须落盘
           grep -q '^CONFIG_DEFAULT_BBR=y$' "$DEFCONFIG" || net_fail "BBR 默认拥塞控制配置写入校验失败"
           grep -q '^CONFIG_IP_SET=y$' "$DEFCONFIG" || net_fail "IPSet 配置写入校验失败"
+          grep -q '^CONFIG_IP_SET_MAX=65534$' "$DEFCONFIG" || net_fail "IPSet 集合数上限配置写入校验失败"
+          grep -q '^CONFIG_NET_SCH_FQ=y$' "$DEFCONFIG" || net_fail "FQ qdisc 配置写入校验失败"
+          grep -q '^CONFIG_NETFILTER_XT_SET=y$' "$DEFCONFIG" || net_fail "XT_SET 配置写入校验失败"
           echo "网络增强 (IPSet + BBR) 配置已写入 defconfig"
 
       - name: 应用 Re-Kernel
