@@ -963,7 +963,11 @@ jobs:
           ensure_cfg "CONFIG_IP6_NF_NAT=y"
           ensure_cfg "CONFIG_IP6_NF_TARGET_MASQUERADE=y"
 
-          # 附加拥塞算法（BBR 之外的备选，各 GKI 版本符号均存在）
+          # 附加拥塞算法（BBR 之外的备选，各 GKI 版本符号均存在）。
+          # BIC/WESTWOOD/HTCP 在 mainline Kconfig 中 default m：开启 TCP_CONG_ADVANCED
+          # 后若不显式置 =y，会以模块形式编译（如 tcp_bic.ko）而 GKI module_outs 未声明，
+          # 导致 bazel 构建失败，故三者必须全部内建。
+          ensure_cfg "CONFIG_TCP_CONG_BIC=y"
           ensure_cfg "CONFIG_TCP_CONG_CUBIC=y"
           ensure_cfg "CONFIG_TCP_CONG_WESTWOOD=y"
           ensure_cfg "CONFIG_TCP_CONG_HTCP=y"
