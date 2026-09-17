@@ -89,7 +89,7 @@ on:
         type: boolean
         default: false
       use_bbg:
-        description: "启用 BBG 防格机"
+        description: "启用 BBG 基带保护"
         type: boolean
         default: false
       use_rekernel:
@@ -592,7 +592,7 @@ jobs:
           | Hook 类型 | $HOOK_TYPE |
           | 挂载方式 | $MOUNT_TYPE |
           | LTO | thin |
-          | BBG 安全补丁 | $BBG_STATUS |
+          | BBG 基带保护 | $BBG_STATUS |
           | ZRAM / LZ4KD | $LZ4_STATUS |
           | KPM | $KPM_STATUS |
 
