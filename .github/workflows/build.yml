@@ -338,6 +338,11 @@ jobs:
             "$GITHUB_WORKSPACE/security_patch"; then
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=CVE-2026-43499 已跳过::修复链应用失败（可能不兼容当前内核子版本），已跳过该功能继续构建"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **CVE-2026-43499 修复链** 已自动跳过：修复链应用失败（可能不兼容当前内核子版本）（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "CVE_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "::error::CVE-2026-43499 修复链应用失败"
@@ -463,6 +468,10 @@ jobs:
             echo "DROIDSPACES_PATCHES=/tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
           elif [ "$SKIP_INCOMPATIBLE" = "true" ]; then
             echo "::warning title=Droidspaces 已跳过::Droidspaces 补丁仓库克隆失败，已跳过 Droidspaces 功能"
+            if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "> ⏭️ **Droidspaces（虚拟化支持）** 已自动跳过：补丁仓库克隆失败（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+            fi
             echo "DROIDSPACES_SKIPPED=true" >> "$GITHUB_ENV"
           else
             echo "::error::Droidspaces 补丁仓库克隆失败"
@@ -497,6 +506,10 @@ jobs:
           if [ ! -f "$PATCH_FILE" ]; then
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=Droidspaces 已跳过::未找到补丁文件 $PATCH_FILE，已跳过 Droidspaces 功能"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **Droidspaces（虚拟化支持）** 已自动跳过：未找到补丁文件 $PATCH_FILE（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
               echo "DROIDSPACES_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
@@ -638,6 +651,11 @@ jobs:
           ntsync_fail() {
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=NTSync 已跳过::$1，已跳过 NTSync 功能"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **NTSync** 已自动跳过：$1（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "NTSYNC_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "::error::$1"
@@ -702,6 +720,10 @@ jobs:
           if [ -n "$MISSING" ]; then
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=ZRAM 已跳过::缺少 ZRAM 补丁资源:$MISSING，已跳过 ZRAM 功能"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **ZRAM / LZ4KD** 已自动跳过：缺少 ZRAM 补丁资源:$MISSING（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
               echo "ZRAM_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
@@ -712,6 +734,10 @@ jobs:
           zram_step_fail() {
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=ZRAM 已跳过::$1，已跳过 ZRAM 功能"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **ZRAM / LZ4KD** 已自动跳过：$1（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
               echo "ZRAM_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
@@ -839,6 +865,11 @@ jobs:
             sh /tmp/bbg_setup.sh --cleanup >/dev/null 2>&1 || true
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=BBG 已跳过::$1，已跳过 BBG 基带保护功能"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **BBG 基带保护** 已自动跳过：$1（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "BBG_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "::error::$1"
@@ -865,6 +896,11 @@ jobs:
           net_fail() {
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=网络增强 已跳过::$1，已跳过 网络增强 (IPSet + BBR) 功能"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **网络增强 (IPSet + BBR)** 已自动跳过：$1（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "NET_ENHANCE_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "::error::$1"
@@ -991,6 +1027,11 @@ jobs:
 
           if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
             echo "::warning title=Re-Kernel 已跳过::Re-Kernel 集成失败（仓库不可用或源码不适配当前内核），已回滚并跳过该功能"
+            if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "> ⏭️ **Re-Kernel** 已自动跳过：集成失败（仓库不可用或源码不适配当前内核），已回滚（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "REKERNEL_SKIPPED=true" >> "$GITHUB_ENV"
             exit 0
           fi
           echo "::error::Re-Kernel 集成失败"
@@ -1011,6 +1052,10 @@ jobs:
                 echo "CONFIG_KPM=y" >> "$DEFCONFIG"
               elif [ "$SKIP_INCOMPATIBLE" = "true" ]; then
                 echo "::warning title=KPM 已跳过::当前 KernelSU 代码未声明 CONFIG_KPM，已跳过 KPM 功能"
+                if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                  echo "" >> "$GITHUB_STEP_SUMMARY"
+                  echo "> ⏭️ **KPM** 已自动跳过：当前 KernelSU 代码未声明 CONFIG_KPM（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+                fi
                 echo "KPM_SKIPPED=true" >> "$GITHUB_ENV"
               else
                 echo "错误: 已请求启用 KPM，但当前 KernelSU 代码未声明 CONFIG_KPM" >&2
@@ -1274,6 +1319,11 @@ jobs:
           if ! cp -f "$SUKISU_PATCHES/kpm/patch_linux" ./patch; then
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=KPM 已跳过::未找到 KPM 修补工具 $SUKISU_PATCHES/kpm/patch_linux，已跳过 KPM 构建期修补，使用未修补 Image"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **KPM（构建期修补）** 已自动跳过：未找到 KPM 修补工具 $SUKISU_PATCHES/kpm/patch_linux（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "KPM_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "::error::未找到 KPM 修补工具 $SUKISU_PATCHES/kpm/patch_linux"
@@ -1283,6 +1333,11 @@ jobs:
           if ! ./patch; then
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=KPM 已跳过::patch_linux 执行失败（可能不适配当前内核版本），已跳过 KPM 构建期修补，使用未修补 Image"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **KPM（构建期修补）** 已自动跳过：patch_linux 执行失败（可能不适配当前内核版本）（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "KPM_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "::error::KPM 修补工具执行失败"
@@ -1291,6 +1346,11 @@ jobs:
           if [ ! -f ./oImage ]; then
             if [ "$SKIP_INCOMPATIBLE" = "true" ]; then
               echo "::warning title=KPM 已跳过::KPM 补丁未生成 oImage（patch_linux 可能不适配当前内核版本），已跳过 KPM 构建期修补，使用未修补 Image"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> ⏭️ **KPM（构建期修补）** 已自动跳过：KPM 补丁未生成 oImage（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "KPM_SKIPPED=true" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "::error::KPM 补丁未生成 oImage，patch_linux 可能不适配当前内核版本"
