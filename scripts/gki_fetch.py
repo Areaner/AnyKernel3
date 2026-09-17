@@ -26,6 +26,7 @@ import binascii
 
 ERRORS = (urllib.error.HTTPError, urllib.error.URLError,
           TimeoutError, http.client.RemoteDisconnected,
+          http.client.HTTPException,
           ConnectionResetError, OSError, binascii.Error)
 
 
@@ -51,13 +52,17 @@ def make_date_range(start: str, end: str) -> list[str]:
     return dates
 
 
-def try_fetch(url: str) -> str | None:
-    """尝试请求一个 URL，失败返回 None"""
-    try:
-        with urllib.request.urlopen(url, timeout=20) as resp:
-            return base64.b64decode(resp.read()).decode("utf-8", errors="replace")
-    except ERRORS:
-        return None
+def try_fetch(url: str, attempts: int = 3) -> str | None:
+    """尝试请求一个 URL，瞬时失败自动重试，最终失败返回 None"""
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=20) as resp:
+                return base64.b64decode(resp.read()).decode("utf-8", errors="replace")
+        except ERRORS:
+            if attempt == attempts:
+                return None
+            time.sleep(attempt)
+    return None
 
 
 def fetch_makefile(android_ver: str, kernel_ver: str, date: str,

@@ -8,7 +8,7 @@ import os
 import time
 
 from gki_fetch import (
-    TARGETS, DATA_DIR,
+    TARGETS,
     make_date_range, get_end_date,
     fetch_makefile, fetch_lts, parse_version, json_path,
 )
@@ -43,7 +43,7 @@ def update_target(android_ver: str, kernel_ver: str,
     new_dates = [d for d in all_dates if d not in existing_dates]
 
     if not new_dates:
-        print(f"  No new months to fetch")
+        print("  No new months to fetch")
     else:
         print(f"  Fetching {len(new_dates)} new month(s): {new_dates[0]} ~ {new_dates[-1]}")
         for date in new_dates:
@@ -99,7 +99,7 @@ def update_target(android_ver: str, kernel_ver: str,
             json.dump(data, f, indent=2, ensure_ascii=False)
         print(f"  => Saved {len(entries)} entries to {path}")
     else:
-        print(f"  => No changes")
+        print("  => No changes")
 
     return changed
 
