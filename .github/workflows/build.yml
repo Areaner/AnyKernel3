@@ -293,6 +293,20 @@ jobs:
           if grep -q deprecated <<< $REMOTE_BRANCH; then
             echo "检测到已弃用的分支: $FORMATTED_BRANCH"
             sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
+          elif [[ -z "$REMOTE_BRANCH" ]]; then
+            echo "分支已被上游删除: ${FORMATTED_BRANCH}，回退到该月最新 ASB tag"
+            LATEST_R=$(git ls-remote https://android.googlesource.com/kernel/common "refs/tags/${FORMATTED_BRANCH}_r*" \
+              | grep -v '\^{}' \
+              | sed 's/.*_r//' \
+              | sort -n | tail -1)
+            if [[ -z "$LATEST_R" ]]; then
+              echo "::error::上游分支与月度 tag 均不存在: ${FORMATTED_BRANCH}"
+              exit 1
+            fi
+            LATEST_TAG="${FORMATTED_BRANCH}_r${LATEST_R}"
+            echo "使用 tag: ${LATEST_TAG}"
+            REMOTE_BRANCH="refs/tags/${LATEST_TAG}"
+            sed -i "s/\"${FORMATTED_BRANCH}\"/\"refs\/tags\/${LATEST_TAG}\"/g" $DEFAULT_MANIFEST_PATH
           fi
 
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
