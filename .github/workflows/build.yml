@@ -879,31 +879,39 @@ jobs:
             net_fail "内核源码缺少 net/netfilter/ipset，无法启用 IPSet"
           fi
 
-          cat >> "$DEFCONFIG" << 'EOF'
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_DEFAULT_BBR=y
-          CONFIG_NET_SCH_FQ=y
-          CONFIG_IP_SET=y
-          CONFIG_IP_SET_BITMAP_IP=y
-          CONFIG_IP_SET_BITMAP_IPMAC=y
-          CONFIG_IP_SET_BITMAP_PORT=y
-          CONFIG_IP_SET_HASH_IP=y
-          CONFIG_IP_SET_HASH_IPMAC=y
-          CONFIG_IP_SET_HASH_IPMARK=y
-          CONFIG_IP_SET_HASH_IPPORT=y
-          CONFIG_IP_SET_HASH_IPPORTIP=y
-          CONFIG_IP_SET_HASH_IPPORTNET=y
-          CONFIG_IP_SET_HASH_NET=y
-          CONFIG_IP_SET_HASH_NETIFACE=y
-          CONFIG_IP_SET_HASH_NETNET=y
-          CONFIG_IP_SET_HASH_NETPORT=y
-          CONFIG_IP_SET_HASH_NETPORTNET=y
-          CONFIG_IP_SET_LIST_SET=y
-          CONFIG_NETFILTER_XT_SET=y
-          EOF
+          # BBR：GKI 6.6/6.12 已内建 TCP_CONG_BBR，只需设为默认拥塞控制；
+          # 5.10/5.15/6.1 未启用，且 DEFAULT_BBR 受 TCP_CONG_ADVANCED 门控，需一并打开
+          if ! grep -q '^CONFIG_TCP_CONG_BBR=y$' "$DEFCONFIG"; then
+            {
+              echo "CONFIG_TCP_CONG_ADVANCED=y"
+              echo "CONFIG_TCP_CONG_BBR=y"
+            } >> "$DEFCONFIG"
+          fi
+          echo "CONFIG_DEFAULT_BBR=y" >> "$DEFCONFIG"
 
-          grep -q '^CONFIG_TCP_CONG_BBR=y$' "$DEFCONFIG" || net_fail "网络增强配置写入校验失败"
+          # IPSet：GKI 各版本均未启用，全新内建（内核侧支持；用户态需配合 ipset 工具使用）
+          {
+            echo "CONFIG_IP_SET=y"
+            echo "CONFIG_IP_SET_BITMAP_IP=y"
+            echo "CONFIG_IP_SET_BITMAP_IPMAC=y"
+            echo "CONFIG_IP_SET_BITMAP_PORT=y"
+            echo "CONFIG_IP_SET_HASH_IP=y"
+            echo "CONFIG_IP_SET_HASH_IPMAC=y"
+            echo "CONFIG_IP_SET_HASH_IPMARK=y"
+            echo "CONFIG_IP_SET_HASH_IPPORT=y"
+            echo "CONFIG_IP_SET_HASH_IPPORTIP=y"
+            echo "CONFIG_IP_SET_HASH_IPPORTNET=y"
+            echo "CONFIG_IP_SET_HASH_NET=y"
+            echo "CONFIG_IP_SET_HASH_NETIFACE=y"
+            echo "CONFIG_IP_SET_HASH_NETNET=y"
+            echo "CONFIG_IP_SET_HASH_NETPORT=y"
+            echo "CONFIG_IP_SET_HASH_NETPORTNET=y"
+            echo "CONFIG_IP_SET_LIST_SET=y"
+            echo "CONFIG_NETFILTER_XT_SET=y"
+          } >> "$DEFCONFIG"
+
+          grep -q '^CONFIG_DEFAULT_BBR=y$' "$DEFCONFIG" || net_fail "BBR 默认拥塞控制配置写入校验失败"
+          grep -q '^CONFIG_IP_SET=y$' "$DEFCONFIG" || net_fail "IPSet 配置写入校验失败"
           echo "网络增强 (IPSet + BBR) 配置已写入 defconfig"
 
       - name: 应用 Re-Kernel
