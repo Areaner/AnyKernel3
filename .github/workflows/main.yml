@@ -421,12 +421,12 @@ jobs:
 
           # 功能开关显示
           echo "LZ4_STATUS=${{ inputs.use_zram && '开启' || '未开启' }}" >> $GITHUB_ENV
-          echo "BBG_STATUS=${{ inputs.use_bbg && '支持' || '不支持' }}" >> $GITHUB_ENV
+          echo "BBG_STATUS=${{ inputs.use_bbg && '开启' || '未开启' }}" >> $GITHUB_ENV
           echo "NET_ENHANCE_STATUS=${{ inputs.use_net_enhance && '开启' || '未开启' }}" >> $GITHUB_ENV
           if [[ "${{ inputs.use_kpm }}" == enabled* ]]; then
-            echo "KPM_STATUS=支持" >> $GITHUB_ENV
+            echo "KPM_STATUS=开启" >> $GITHUB_ENV
           elif [[ "${{ inputs.use_kpm }}" == patched* ]]; then
-            echo "KPM_STATUS=支持（构建期修补）" >> $GITHUB_ENV
+            echo "KPM_STATUS=开启（构建期修补）" >> $GITHUB_ENV
           else
             echo "KPM_STATUS=未开启" >> $GITHUB_ENV
           fi
