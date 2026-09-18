@@ -24,9 +24,9 @@ on:
         description: "5.10 子版本 (选择后自动匹配安全补丁级别；仅内核版本为 5.10 时生效)"
         required: false
         type: choice
-        default: "auto (使用下方安全补丁级别)"
+        default: "auto (自动匹配最新安全补丁级别)"
         options:
-          - "auto (使用下方安全补丁级别)"
+          - "auto (自动匹配最新安全补丁级别)"
           - "43 (2021-08)"
           - "43 (2021-09)"
           - "43 (2021-10)"
@@ -68,9 +68,9 @@ on:
         description: "5.15 子版本 (选择后自动匹配安全补丁级别；仅内核版本为 5.15 时生效)"
         required: false
         type: choice
-        default: "auto (使用下方安全补丁级别)"
+        default: "auto (自动匹配最新安全补丁级别)"
         options:
-          - "auto (使用下方安全补丁级别)"
+          - "auto (自动匹配最新安全补丁级别)"
           - "41 (2022-06)"
           - "41 (2022-07)"
           - "41 (2022-08)"
@@ -111,9 +111,9 @@ on:
         description: "6.1 子版本 (选择后自动匹配安全补丁级别；仅内核版本为 6.1 时生效)"
         required: false
         type: choice
-        default: "auto (使用下方安全补丁级别)"
+        default: "auto (自动匹配最新安全补丁级别)"
         options:
-          - "auto (使用下方安全补丁级别)"
+          - "auto (自动匹配最新安全补丁级别)"
           - "25 (2023-06)"
           - "25 (2023-07)"
           - "25 (2023-08)"
@@ -151,9 +151,9 @@ on:
         description: "6.6 子版本 (选择后自动匹配安全补丁级别；仅内核版本为 6.6 时生效)"
         required: false
         type: choice
-        default: "auto (使用下方安全补丁级别)"
+        default: "auto (自动匹配最新安全补丁级别)"
         options:
-          - "auto (使用下方安全补丁级别)"
+          - "auto (自动匹配最新安全补丁级别)"
           - "50 (2024-10)"
           - "56 (2024-11)"
           - "57 (2024-12)"
@@ -175,9 +175,9 @@ on:
         description: "6.12 子版本 (选择后自动匹配安全补丁级别；仅内核版本为 6.12 时生效)"
         required: false
         type: choice
-        default: "auto (使用下方安全补丁级别)"
+        default: "auto (自动匹配最新安全补丁级别)"
         options:
-          - "auto (使用下方安全补丁级别)"
+          - "auto (自动匹配最新安全补丁级别)"
           - "23 (2025-06)"
           - "30 (2025-07)"
           - "38 (2025-08)"
@@ -306,7 +306,6 @@ jobs:
           SUB_LEVEL_6_1: ${{ inputs.sub_level_6_1 }}
           SUB_LEVEL_6_6: ${{ inputs.sub_level_6_6 }}
           SUB_LEVEL_6_12: ${{ inputs.sub_level_6_12 }}
-          OS_PATCH_LEVEL: "2022-01"
         run: |
           python3 <<'PY'
           import json
@@ -315,7 +314,6 @@ jobs:
           from pathlib import Path
 
           kernel_version = os.environ["KERNEL_VERSION"]
-          os_patch_level = os.environ["OS_PATCH_LEVEL"].strip()
           android_map = {
               "5.10": "android12",
               "5.15": "android13",
@@ -367,27 +365,19 @@ jobs:
                   print(f"::error::无法识别的子版本: {sub_level_input}")
                   sys.exit(1)
           else:
-              patch_level = os_patch_level
-              if patch_level == "lts":
-                  kernel_full = data.get("lts")
-                  if not kernel_full:
-                      print(f"::error::{android_version} / {kernel_version} 缺少 LTS 版本数据")
-                      sys.exit(1)
-                  sub_level = "X"
-              else:
-                  matched = next(
-                      (entry for entry in data.get("entries", []) if entry.get("date") == os_patch_level),
-                      None,
-                  )
-                  if matched is None:
-                      print(f"::error::未找到 {android_version} / {kernel_version} / {os_patch_level} 对应的版本数据")
-                      sys.exit(1)
-                  kernel_full = matched.get("kernel", "")
-                  prefix = f"{kernel_version}."
-                  if not kernel_full.startswith(prefix):
-                      print(f"::error::版本数据异常: {kernel_full} 不属于 {kernel_version}")
-                      sys.exit(1)
-                  sub_level = kernel_full.rsplit(".", 1)[-1]
+              # auto：取版本数据中最新的月度 ASB 条目（数据由 update_data.py 持续刷新）
+              entries = data.get("entries", [])
+              if not entries:
+                  print(f"::error::{android_version} / {kernel_version} 没有可用的版本数据")
+                  sys.exit(1)
+              latest = entries[-1]
+              kernel_full = latest.get("kernel", "")
+              prefix = f"{kernel_version}."
+              if not kernel_full.startswith(prefix):
+                  print(f"::error::版本数据异常: {kernel_full} 不属于 {kernel_version}")
+                  sys.exit(1)
+              patch_level = latest.get("date", "")
+              sub_level = kernel_full.rsplit(".", 1)[-1]
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"android_version={android_version}\n")

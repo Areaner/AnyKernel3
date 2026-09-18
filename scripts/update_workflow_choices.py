@@ -4,7 +4,7 @@ Reads data/<android>/<kernel>.json (kept fresh by update_data.py) and
 rewrites the `options:` list of every sub_level_* input in
 .github/workflows/kernel-custom.yml:
 
-    - "auto (使用下方安全补丁级别)"   (keep first, always)
+    - "auto (自动匹配最新安全补丁级别)"  (keep first, always)
     - "<sublevel> (<ASB month>)"     (one per monthly entry)
     - "lts (<lts full version>)"     (from the JSON "lts" field)
 
@@ -32,7 +32,7 @@ VERSIONS = {
 
 def build_options(data: dict) -> list[str]:
     """Build the option labels (without the list dash/indent)."""
-    lines = ["auto (使用下方安全补丁级别)"]
+    lines = ["auto (自动匹配最新安全补丁级别)"]
     entries = sorted(data.get("entries", []), key=lambda e: e["date"])
     for entry in entries:
         sub = entry["kernel"].rsplit(".", 1)[-1]
