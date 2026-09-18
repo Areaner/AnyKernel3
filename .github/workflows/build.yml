@@ -950,7 +950,6 @@ jobs:
           ensure_cfg "CONFIG_IP_SET_HASH_IPPORT=y"
           ensure_cfg "CONFIG_IP_SET_HASH_IPPORTIP=y"
           ensure_cfg "CONFIG_IP_SET_HASH_IPPORTNET=y"
-          ensure_cfg "CONFIG_IP_SET_HASH_IPMAC=y"
           ensure_cfg "CONFIG_IP_SET_HASH_MAC=y"
           ensure_cfg "CONFIG_IP_SET_HASH_NET=y"
           ensure_cfg "CONFIG_IP_SET_HASH_NETIFACE=y"
