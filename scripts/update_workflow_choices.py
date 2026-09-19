@@ -1,12 +1,20 @@
-"""Regenerate the sub-level dropdown choices in kernel-custom.yml.
+"""Regenerate the sub-level dropdown choices in kernel-custom.yml and
+auto-append newly published kernel sub-levels to the per-version build
+matrices in kernel-a<android>-<kernel>.yml.
 
-Reads data/<android>/<kernel>.json (kept fresh by update_data.py) and
-rewrites the `options:` list of every sub_level_* input in
-.github/workflows/kernel-custom.yml:
+Reads data/<android>/<kernel>.json (kept fresh by update_data.py) and:
+
+1. Rewrites the `options:` list of every sub_level_* input in
+   .github/workflows/kernel-custom.yml:
 
     - "auto (自动匹配最新安全补丁级别)"  (keep first, always)
     - "<sublevel> (<ASB month>)"     (one per monthly entry)
     - "lts (<lts full version>)"     (from the JSON "lts" field)
+
+2. Appends newly published ASB quarters (dates newer than anything
+   already listed) to the `matrix.include` list of each
+   kernel-aXX-*.yml, right before the trailing X/lts entry. Existing
+   entries are never touched or removed.
 
 Idempotent: exits 0 and writes nothing when everything is already
 up-to-date. Exits 1 on structural errors (missing file / section).
@@ -29,6 +37,19 @@ VERSIONS = {
     "6_12": "android16/6.12",
 }
 
+# data file (relative to repo root) -> matrix workflow file
+MATRIX_FILES = {
+    "android12/5.10": "kernel-a12-5-10.yml",
+    "android13/5.15": "kernel-a13-5-15.yml",
+    "android14/6.1": "kernel-a14-6-1.yml",
+    "android15/6.6": "kernel-a15-6-6.yml",
+    "android16/6.12": "kernel-a16-6-12.yml",
+}
+
+ITEM_INDENT = "          - "
+FIELD_INDENT = "            "
+ITEM_PREFIX = "          "  # plain indent used when generating new items
+
 
 def build_options(data: dict) -> list[str]:
     """Build the option labels (without the list dash/indent)."""
@@ -41,6 +62,89 @@ def build_options(data: dict) -> list[str]:
     if lts:
         lines.append(f"lts ({lts})")
     return lines
+
+
+def _split_include_items(block_lines: list[str]) -> list[list[str]]:
+    """Split include block lines into items: ['- sub_level..', '  field..']."""
+    items: list[list[str]] = []
+    for line in block_lines:
+        if line.lstrip().startswith("- "):
+            items.append([line])
+        else:
+            items[-1].append(line)
+    return items
+
+
+def sync_matrix_file(data: dict, wf_path: Path) -> tuple[bool, list[str], list[str]]:
+    """Append newly published ASB quarters to matrix.include.
+
+    Existing entries are left untouched; only entries whose date is newer
+    than everything already in the matrix are appended, right before the
+    trailing X/lts entry (which is preserved together with any extra
+    fields attached to it, e.g. revision). Returns (changed, added, removed).
+    """
+    text = wf_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+
+    # locate `include:` under `matrix:`
+    inc_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == "include:" and i > 0 and lines[i - 1].strip() == "matrix:":
+            inc_idx = i
+            break
+    if inc_idx is None:
+        raise ValueError(f"matrix.include block not found in {wf_path.name}")
+
+    # collect existing items until a line that is not part of the list
+    start = inc_idx + 1
+    end = start
+    while end < len(lines):
+        s = lines[end]
+        if s.startswith(ITEM_INDENT) or (s.strip() and s.startswith(FIELD_INDENT)
+                                        and not s.lstrip().startswith("- ")):
+            end += 1
+            continue
+        break
+    old_items = _split_include_items(lines[start:end])
+
+    # the trailing X/lts entry (and any extra fields attached to it) stays
+    keep = [it for it in old_items
+            if any('"lts"' in l or 'sub_level: "X"' in l for l in it)]
+    if len(keep) != 1:
+        raise ValueError(f"expected exactly one X/lts entry in {wf_path.name}, found {len(keep)}")
+
+    # only quarters newer than everything currently in the matrix get added
+    existing_dates = set()
+    for it in old_items:
+        m = re.search(r'os_patch_level: "([^"]+)"', "".join(it))
+        if m and m.group(1) != "lts":
+            existing_dates.add(m.group(1))
+    max_date = max(existing_dates) if existing_dates else ""
+
+    new_items = []
+    for entry in sorted(data.get("entries", []), key=lambda e: e["date"]):
+        if entry["date"] <= max_date or entry["date"] in existing_dates:
+            continue
+        sub = entry["kernel"].rsplit(".", 1)[-1]
+        new_items.append([f"{ITEM_PREFIX}- sub_level: \"{sub}\"\n",
+                          f"{FIELD_INDENT}os_patch_level: \"{entry['date']}\"\n"])
+
+    if not new_items:
+        return False, [], []
+
+    # insert the new items right before the X/lts entry
+    x_start = start + sum(len(it) for it in old_items[: old_items.index(keep[0])])
+    lines[x_start:x_start] = [l for it in new_items for l in it]
+    wf_path.write_text("".join(lines), encoding="utf-8", newline="")
+
+    def key_of(it):
+        joined = "".join(it)
+        s = re.search(r'sub_level: "([^"]+)"', joined)
+        p = re.search(r'os_patch_level: "([^"]+)"', joined)
+        return "%s-%s" % (s.group(1) if s else "?", p.group(1) if p else "?")
+
+    added = [key_of(it) for it in new_items]
+    return True, added, []
 
 
 def main() -> int:
@@ -84,6 +188,28 @@ def main() -> int:
         print("kernel-custom.yml choices regenerated.")
     else:
         print("kernel-custom.yml choices already up-to-date.")
+
+    # append new sub-levels to per-version build matrices (kernel-aXX-*.yml)
+    for rel, wf_name in MATRIX_FILES.items():
+        data_file = ROOT / "data" / f"{rel}.json"
+        wf_path = ROOT / ".github" / "workflows" / wf_name
+        if not data_file.exists() or not wf_path.exists():
+            print(f"::error::matrix sync skipped, missing: {data_file} or {wf_path}",
+                  file=sys.stderr)
+            return 1
+        data = json.loads(data_file.read_text(encoding="utf-8"))
+        try:
+            changed, added, removed = sync_matrix_file(data, wf_path)
+        except ValueError as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 1
+        if changed:
+            for a in added:
+                print(f"{wf_name}: + {a}")
+            print(f"{wf_name}: matrix updated (+{len(added)} new sub-levels)")
+        else:
+            print(f"{wf_name}: matrix unchanged (no new sub-levels)")
+
     return 0
 
 
