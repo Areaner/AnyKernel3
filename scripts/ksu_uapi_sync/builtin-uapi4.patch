@@ -22,7 +22,7 @@ index bfdc1d14..8db9f90d 100644
  struct ksu_get_info_cmd {
      __u32 version; /* Output: KERNEL_SU_VERSION */
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
-index c1d3abaf..11499e27 100644
+index c1d3abaf..a7d117a9 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
 @@ -920,7 +920,8 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
@@ -53,6 +53,15 @@ index c1d3abaf..11499e27 100644
      },
      {
          .cmd = KSU_IOCTL_GET_FULL_VERSION,
+@@ -999,7 +1001,7 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
+ };
+ // clang-format on
+ 
+-long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp)
++long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void __user *argp)
+ {
+     int i;
+ 
 @@ -1010,7 +1012,8 @@ long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp)
      for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
          if (cmd == ksu_ioctl_handlers[i].cmd) {
