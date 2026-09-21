@@ -668,15 +668,27 @@ jobs:
             SUS_VERSION="1.0.0"
           fi
 
-          LATEST_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name' 2>/dev/null | sed 's/-.*//' || echo "")
+          # Query the latest full tag with retries; fall back to empty on failure
+          FULL_TAG=""
+          for i in 1 2 3; do
+            FULL_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name' 2>/dev/null) && [ -n "$FULL_TAG" ] && break
+            FULL_TAG=""
+            sleep 3
+          done
 
-          if [ "$SUS_VERSION" = "$LATEST_TAG" ]; then
-            LATEST_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name')
+          if [ -n "$FULL_TAG" ] && [ "$(echo "$FULL_TAG" | sed 's/-.*//')" = "$SUS_VERSION" ]; then
+            BASE_TAG="$FULL_TAG"
           else
-            LATEST_TAG="$SUS_VERSION-r0"
+            BASE_TAG="$SUS_VERSION-r0"
           fi
 
-          NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
+          NEW_TAG=$(echo "$BASE_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
+
+          # Guard against malformed tags (e.g. "-r1" when the lookup failed)
+          if [[ ! "$NEW_TAG" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+            echo "标签生成异常，回退为 $SUS_VERSION-r1"
+            NEW_TAG="$SUS_VERSION-r1"
+          fi
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
           echo "生成标签: $NEW_TAG"
 
@@ -694,11 +706,22 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
 
-          gh release create "$NEW_TAG" \
-            --title "$RELEASE_NAME" \
-            --notes-file release_body.md \
-            --target "$GITHUB_SHA" \
-            $PRERELEASE_FLAG
+          for i in 1 2 3; do
+            if gh release view "$NEW_TAG" > /dev/null 2>&1; then
+              echo "Release $NEW_TAG 已存在，跳过创建"
+              break
+            fi
+            if gh release create "$NEW_TAG" \
+              --title "$RELEASE_NAME" \
+              --notes-file release_body.md \
+              --target "$GITHUB_SHA" \
+              $PRERELEASE_FLAG; then
+              break
+            fi
+            [ "$i" = 3 ] && exit 1
+            echo "创建 Release 失败，10 秒后重试 ($i/3)..."
+            sleep 10
+          done
 
       # ==================== 上传管理器和模块 ====================
       - name: 上传管理器和 SUSFS 模块
