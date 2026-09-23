@@ -54,7 +54,7 @@ on:
         required: false
       # ==================== 选项配置 ====================
       use_kpm:
-        description: "KPM 功能"
+        description: "KPM 功能（仅SukiSU支持）"
         type: choice
         default: "disabled (关闭)"
         options:

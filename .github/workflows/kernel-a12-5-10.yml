@@ -25,7 +25,7 @@ on:
         type: string
         default: ""
       use_kpm:
-        description: "KPM 功能"
+        description: "KPM 功能（仅SukiSU支持）"
         required: true
         type: choice
         default: "disabled (关闭)"
